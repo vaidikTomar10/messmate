@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">MessMate</string>
+    <string name="widget_description">Live Mess Meal Timetable &amp; Menu Widget</string>
+    <string name="meal_channel_name">Meal Reminders</string>
+    <string name="meal_channel_desc">Notifications for upcoming hostel mess meals</string>
+</resources>

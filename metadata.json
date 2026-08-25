@@ -1,0 +1,6 @@
+{
+  "name": "MessMate",
+  "description": "Hostel and college mess timetable, live meal tracker, weekly menu planner, and home-screen widget.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
