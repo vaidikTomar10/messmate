@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.local.MealEntity
 import com.example.data.model.DayEnum
 import com.example.data.model.MealType
+import com.example.ui.components.AppFooter
 import com.example.ui.components.MealCard
 import com.example.util.MealTimeUtils
 
@@ -268,6 +269,11 @@ fun WeeklyMenuScreen(
                         )
                     }
                 }
+            }
+
+            item {
+                AppFooter()
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }

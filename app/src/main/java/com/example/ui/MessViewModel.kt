@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
+import com.example.data.local.FoodItemEntity
 import com.example.data.local.MealEntity
 import com.example.data.model.ActiveMealState
 import com.example.data.model.DayEnum
@@ -41,6 +42,12 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
     private val _editingMeal = MutableStateFlow<MealEntity?>(null)
     val editingMeal: StateFlow<MealEntity?> = _editingMeal.asStateFlow()
 
+    private val _foodCategoryFilter = MutableStateFlow<String?>(null)
+    val foodCategoryFilter: StateFlow<String?> = _foodCategoryFilter.asStateFlow()
+
+    private val _foodSearchQuery = MutableStateFlow("")
+    val foodSearchQuery: StateFlow<String> = _foodSearchQuery.asStateFlow()
+
     private val _notificationsEnabled = MutableStateFlow(false)
     val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
 
@@ -55,7 +62,7 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = MealRepository(db.mealDao())
+        repository = MealRepository(db.mealDao(), db.foodDao())
 
         // Initial setup
         MealNotificationHelper.createNotificationChannel(application)
@@ -84,6 +91,20 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
+    val allFoodItems: StateFlow<List<FoodItemEntity>> = repository.allFoodItems
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val allCategories: StateFlow<List<String>> = repository.allCategories
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     val activeMealState: StateFlow<ActiveMealState> = combine(allMeals, tickerFlow) { meals, _ ->
         MealTimeUtils.calculateActiveMealState(meals)
     }.stateIn(
@@ -102,6 +123,14 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setMealFilter(filter: MealType?) {
         _selectedMealFilter.value = filter
+    }
+
+    fun setFoodCategoryFilter(category: String?) {
+        _foodCategoryFilter.value = category
+    }
+
+    fun setFoodSearchQuery(query: String) {
+        _foodSearchQuery.value = query
     }
 
     fun openEditMeal(meal: MealEntity) {
@@ -135,6 +164,31 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
                     MealNotificationHelper.scheduleNextMealReminder(context)
                 }
             }
+        }
+    }
+
+    fun addFoodItem(name: String, category: String, iconEmoji: String = "🍽️") {
+        viewModelScope.launch {
+            repository.insertFoodItem(name, category, iconEmoji)
+        }
+    }
+
+    fun deleteFoodItem(id: Long) {
+        viewModelScope.launch {
+            repository.deleteFoodItem(id)
+        }
+    }
+
+    fun addFoodToTimetable(dayOfWeek: Int, mealType: String, foodName: String) {
+        viewModelScope.launch {
+            repository.addFoodItemToMeal(dayOfWeek, mealType, foodName)
+            MessWidgetProvider.updateAllWidgets(context)
+        }
+    }
+
+    fun resetFoodLibrary() {
+        viewModelScope.launch {
+            repository.resetFoodLibrary()
         }
     }
 

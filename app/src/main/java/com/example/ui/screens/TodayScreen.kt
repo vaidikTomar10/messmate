@@ -59,6 +59,7 @@ import com.example.data.model.ActiveMealState
 import com.example.data.model.DayEnum
 import com.example.data.model.MealActiveStatus
 import com.example.data.model.MealType
+import com.example.ui.components.AppFooter
 import com.example.ui.components.MealCard
 import com.example.ui.theme.SleekBorder
 import com.example.ui.theme.SleekOnPrimaryContainer
@@ -256,6 +257,7 @@ fun TodayScreen(
         }
 
         item {
+            AppFooter()
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

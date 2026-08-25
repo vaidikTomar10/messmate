@@ -110,7 +110,7 @@ object MealNotificationHelper {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AppDatabase.getDatabase(context)
-                val repository = MealRepository(db.mealDao())
+                val repository = MealRepository(db.mealDao(), db.foodDao())
                 val allMeals = repository.getAllMealsSync()
                 val currentDay = MealTimeUtils.getCurrentDayNumber()
                 val currentMinutes = MealTimeUtils.getCurrentMinutesOfDay()

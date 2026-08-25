@@ -21,9 +21,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Fastfood
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -55,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.DayEnum
 import com.example.ui.MessViewModel
 import com.example.ui.components.EditMealDialog
+import com.example.ui.screens.FoodCategoriesScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TodayScreen
 import com.example.ui.screens.WeeklyMenuScreen
@@ -76,7 +79,8 @@ enum class NavigationTab(
     val testTag: String
 ) {
     TODAY("Today", Icons.Filled.Restaurant, Icons.Outlined.Restaurant, "nav_today"),
-    WEEKLY("Weekly Menu", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, "nav_weekly"),
+    WEEKLY("Weekly", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, "nav_weekly"),
+    FOOD_LIBRARY("Food Library", Icons.Filled.Fastfood, Icons.Outlined.Fastfood, "nav_food_library"),
     SETTINGS("Settings", Icons.Filled.Settings, Icons.Outlined.Settings, "nav_settings")
 }
 
@@ -101,6 +105,10 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedMealFilter by viewModel.selectedMealFilter.collectAsStateWithLifecycle()
     val editingMeal by viewModel.editingMeal.collectAsStateWithLifecycle()
+    val allFoodItems by viewModel.allFoodItems.collectAsStateWithLifecycle()
+    val allCategories by viewModel.allCategories.collectAsStateWithLifecycle()
+    val foodCategoryFilter by viewModel.foodCategoryFilter.collectAsStateWithLifecycle()
+    val foodSearchQuery by viewModel.foodSearchQuery.collectAsStateWithLifecycle()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val reminderMinutes by viewModel.reminderMinutes.collectAsStateWithLifecycle()
     val messName by viewModel.messName.collectAsStateWithLifecycle()
@@ -248,6 +256,23 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                             onToggleFavorite = { id, current -> viewModel.toggleFavorite(id, current) }
                         )
                     }
+                    NavigationTab.FOOD_LIBRARY -> {
+                        FoodCategoriesScreen(
+                            foodItems = allFoodItems,
+                            categories = allCategories,
+                            selectedCategory = foodCategoryFilter,
+                            searchQuery = foodSearchQuery,
+                            onSelectCategory = { viewModel.setFoodCategoryFilter(it) },
+                            onSearchQueryChange = { viewModel.setFoodSearchQuery(it) },
+                            onAddFoodItem = { name, category, emoji ->
+                                viewModel.addFoodItem(name, category, emoji)
+                            },
+                            onDeleteFoodItem = { viewModel.deleteFoodItem(it) },
+                            onAddFoodToTimetable = { day, mealType, foodName ->
+                                viewModel.addFoodToTimetable(day, mealType, foodName)
+                            }
+                        )
+                    }
                     NavigationTab.SETTINGS -> {
                         SettingsScreen(
                             messName = messName,
@@ -256,7 +281,8 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                             onMessNameChange = { viewModel.updateMessName(it) },
                             onNotificationsToggle = { viewModel.setNotificationsToggle(it) },
                             onReminderMinutesChange = { viewModel.updateReminderMinutes(it) },
-                            onResetMenu = { viewModel.resetMenuToDefaults() }
+                            onResetMenu = { viewModel.resetMenuToDefaults() },
+                            onResetFoodLibrary = { viewModel.resetFoodLibrary() }
                         )
                     }
                 }

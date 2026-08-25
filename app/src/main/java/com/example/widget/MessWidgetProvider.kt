@@ -23,7 +23,7 @@ class MessWidgetProvider : AppWidgetProvider() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AppDatabase.getDatabase(context)
-                val repository = MealRepository(db.mealDao())
+                val repository = MealRepository(db.mealDao(), db.foodDao())
                 repository.ensureDefaultDataPopulated()
                 val allMeals = repository.getAllMealsSync()
                 val state = MealTimeUtils.calculateActiveMealState(allMeals)
@@ -123,7 +123,7 @@ class MessWidgetProvider : AppWidgetProvider() {
                     val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
                     if (appWidgetIds.isNotEmpty()) {
                         val db = AppDatabase.getDatabase(context)
-                        val repository = MealRepository(db.mealDao())
+                        val repository = MealRepository(db.mealDao(), db.foodDao())
                         val allMeals = repository.getAllMealsSync()
                         val state = MealTimeUtils.calculateActiveMealState(allMeals)
 

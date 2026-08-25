@@ -48,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import com.example.ui.components.AppFooter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,11 +73,13 @@ fun SettingsScreen(
     onNotificationsToggle: (Boolean) -> Unit,
     onReminderMinutesChange: (Int) -> Unit,
     onResetMenu: () -> Unit,
+    onResetFoodLibrary: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var inputMessName by remember(messName) { mutableStateOf(messName) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var showResetFoodLibraryDialog by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -369,11 +372,24 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Reset Timetable to Default Hostel Menu")
                     }
+
+                    OutlinedButton(
+                        onClick = { showResetFoodLibraryDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("reset_food_library_button"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reset Food Library Catalog")
+                    }
                 }
             }
         }
 
         item {
+            AppFooter()
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -399,6 +415,33 @@ fun SettingsScreen(
             },
             dismissButton = {
                 OutlinedButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showResetFoodLibraryDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetFoodLibraryDialog = false },
+            title = { Text("Reset Food Library?") },
+            text = { Text("This will restore the standard catalog of categorised Indian hostel food items and remove any custom added dishes.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onResetFoodLibrary()
+                        showResetFoodLibraryDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.testTag("confirm_reset_food_library_button")
+                ) {
+                    Text("Reset Catalog")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showResetFoodLibraryDialog = false }) {
                     Text("Cancel")
                 }
             }
