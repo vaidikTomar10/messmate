@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restaurant
@@ -70,9 +71,11 @@ fun SettingsScreen(
     messName: String,
     notificationsEnabled: Boolean,
     reminderMinutes: Int,
+    geminiApiKey: String = "",
     onMessNameChange: (String) -> Unit,
     onNotificationsToggle: (Boolean) -> Unit,
     onReminderMinutesChange: (Int) -> Unit,
+    onUpdateGeminiApiKey: (String) -> Unit = {},
     onResetMenu: () -> Unit,
     onResetFoodLibrary: () -> Unit = {},
     onOpenAiScan: () -> Unit = {},
@@ -80,6 +83,8 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var inputMessName by remember(messName) { mutableStateOf(messName) }
+    var inputApiKey by remember(geminiApiKey) { mutableStateOf(if (geminiApiKey != "MY_GEMINI_API_KEY") geminiApiKey else "") }
+    var showApiKeyText by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showResetFoodLibraryDialog by remember { mutableStateOf(false) }
 
@@ -390,6 +395,69 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "🔑 Gemini API Key",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Required to extract text from images. Free keys available at Google AI Studio.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+
+                            OutlinedTextField(
+                                value = inputApiKey,
+                                onValueChange = { inputApiKey = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_gemini_api_key_input"),
+                                placeholder = { Text("AIzaSy... API key") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                visualTransformation = if (showApiKeyText) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.material3.IconButton(onClick = { showApiKeyText = !showApiKeyText }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Lock,
+                                                contentDescription = "Toggle key visibility",
+                                                tint = if (showApiKeyText) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        if (inputApiKey.trim() != geminiApiKey.trim() && inputApiKey.isNotBlank()) {
+                                            FilledTonalButton(
+                                                onClick = { onUpdateGeminiApiKey(inputApiKey.trim()) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier
+                                                    .height(32.dp)
+                                                    .padding(end = 4.dp)
+                                            ) {
+                                                Text("Save", fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                },
+                                textStyle = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
 
                     Button(
                         onClick = onOpenAiScan,

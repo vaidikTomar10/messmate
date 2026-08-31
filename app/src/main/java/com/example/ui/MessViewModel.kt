@@ -57,6 +57,9 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
     private val _messName = MutableStateFlow("Hostel Mess")
     val messName: StateFlow<String> = _messName.asStateFlow()
 
+    private val _geminiApiKey = MutableStateFlow("")
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
     // AI Timetable Scanner State
     private val _showAiScanDialog = MutableStateFlow(false)
     val showAiScanDialog: StateFlow<Boolean> = _showAiScanDialog.asStateFlow()
@@ -88,6 +91,7 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
         _notificationsEnabled.value = MealNotificationHelper.isNotificationsEnabled(application)
         _reminderMinutes.value = MealNotificationHelper.getReminderMinutes(application)
         _messName.value = MealNotificationHelper.getMessName(application)
+        _geminiApiKey.value = MealNotificationHelper.getGeminiApiKey(application)
 
         viewModelScope.launch {
             repository.ensureDefaultDataPopulated()
@@ -242,6 +246,11 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
         MealNotificationHelper.setMessName(context, name)
     }
 
+    fun updateGeminiApiKey(apiKey: String) {
+        _geminiApiKey.value = apiKey.trim()
+        MealNotificationHelper.setGeminiApiKey(context, apiKey.trim())
+    }
+
     fun shareDayMenu(dayNumber: Int) {
         viewModelScope.launch {
             val dayMeals = repository.getMealsForDaySync(dayNumber)
@@ -304,10 +313,16 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        val key = _geminiApiKey.value.ifBlank { MealNotificationHelper.getGeminiApiKey(context) }
+        if (key.isBlank() || key == "MY_GEMINI_API_KEY") {
+            _aiScanError.value = "Gemini API key is required for AI image scanning. Please enter your Gemini API key or use a sample timetable template."
+            return
+        }
+
         viewModelScope.launch {
             _isAiScanning.value = true
             _aiScanError.value = null
-            _aiScanStatusText.value = "Loading timetable image..."
+            _aiScanStatusText.value = "Loading & processing image..."
 
             val bitmap = com.example.data.ai.TimetableAiService.loadScaledBitmap(context, uri)
             if (bitmap == null) {
@@ -316,16 +331,16 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            _aiScanStatusText.value = "AI is analyzing timetable columns, days & meal slots..."
-            val result = com.example.data.ai.TimetableAiService.analyzeTimetableImage(bitmap, customNote)
+            _aiScanStatusText.value = "Gemini Vision AI is analyzing days, meal columns & food items..."
+            val result = com.example.data.ai.TimetableAiService.analyzeTimetableImage(bitmap, key, customNote)
 
             result.onSuccess { scanResult ->
                 _aiScanResult.value = scanResult
                 _isAiScanning.value = false
-                _aiScanStatusText.value = "Extraction complete!"
+                _aiScanStatusText.value = "Extraction complete! Review your schedule below."
             }.onFailure { error ->
                 _isAiScanning.value = false
-                _aiScanError.value = "AI Scanning encountered an issue: ${error.message}"
+                _aiScanError.value = error.message ?: "AI Scanning failed. Please check your image or API key."
             }
         }
     }

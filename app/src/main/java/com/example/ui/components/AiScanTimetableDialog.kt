@@ -4,9 +4,10 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +15,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -35,13 +37,10 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -50,6 +49,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -77,12 +77,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -107,6 +108,8 @@ fun AiScanTimetableDialog(
     statusText: String,
     scanResult: AiTimetableResult?,
     errorMessage: String?,
+    geminiApiKey: String = "",
+    onUpdateApiKey: (String) -> Unit = {},
     onSelectImageUri: (Uri?) -> Unit,
     onStartScan: (Uri?, String?) -> Unit,
     onLoadSampleTemplate: (String) -> Unit,
@@ -129,6 +132,13 @@ fun AiScanTimetableDialog(
     var detectedMessName by remember(scanResult) { mutableStateOf(scanResult?.messName ?: "") }
     var importDishesToLibrary by remember { mutableStateOf(true) }
     var previewSelectedDay by remember { mutableIntStateOf(1) }
+
+    // API Key configuration state
+    var showApiKeyInput by remember { mutableStateOf(geminiApiKey.isBlank() || geminiApiKey == "MY_GEMINI_API_KEY") }
+    var tempApiKeyInput by remember(geminiApiKey) { mutableStateOf(if (geminiApiKey != "MY_GEMINI_API_KEY") geminiApiKey else "") }
+    var showKeyPassword by remember { mutableStateOf(false) }
+
+    val isKeyConfigured = geminiApiKey.isNotBlank() && geminiApiKey != "MY_GEMINI_API_KEY"
 
     // Editable copy of scanned meals for manual tweaks before saving
     val editableMeals = remember(scanResult) {
@@ -179,7 +189,7 @@ fun AiScanTimetableDialog(
                             color = SleekTextPrimary
                         )
                         Text(
-                            text = "Upload menu photo to auto-set weekly timetable",
+                            text = "Extract schedule from image using Gemini Vision AI",
                             style = MaterialTheme.typography.bodySmall,
                             color = SleekTextSecondary
                         )
@@ -203,8 +213,123 @@ fun AiScanTimetableDialog(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    // API Key Config / Status Bar
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isKeyConfigured) SleekSecondaryContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        border = BorderStroke(1.dp, if (isKeyConfigured) SleekBorder else SleekTerracottaPrimary.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isKeyConfigured) Icons.Default.CheckCircle else Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = if (isKeyConfigured) Color(0xFF2E7D32) else SleekTerracottaPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isKeyConfigured) "Gemini Vision AI: Connected" else "Gemini API Key Required",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isKeyConfigured) Color(0xFF2E7D32) else SleekTerracottaPrimary
+                                    )
+                                }
+
+                                Text(
+                                    text = if (showApiKeyInput) "Hide" else if (isKeyConfigured) "Change Key" else "Enter Key",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SleekTerracottaPrimary,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { showApiKeyInput = !showApiKeyInput }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            AnimatedVisibility(
+                                visible = showApiKeyInput,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Get your free Gemini API key from Google AI Studio (aistudio.google.com) to scan physical timetable photos:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = SleekTextSecondary,
+                                        lineHeight = 16.sp
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = tempApiKeyInput,
+                                            onValueChange = { tempApiKeyInput = it },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("gemini_api_key_input"),
+                                            placeholder = { Text("Paste AIzaSy... key here") },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(10.dp),
+                                            visualTransformation = if (showKeyPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                            trailingIcon = {
+                                                IconButton(onClick = { showKeyPassword = !showKeyPassword }) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Lock,
+                                                        contentDescription = "Toggle Visibility",
+                                                        tint = if (showKeyPassword) SleekTerracottaPrimary else SleekTextSecondary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            },
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                unfocusedBorderColor = SleekBorder
+                                            ),
+                                            textStyle = MaterialTheme.typography.bodySmall
+                                        )
+
+                                        FilledTonalButton(
+                                            onClick = {
+                                                onUpdateApiKey(tempApiKeyInput.trim())
+                                                showApiKeyInput = false
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            enabled = tempApiKeyInput.isNotBlank(),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                        ) {
+                                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Save")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Upload Drop Card
                     Card(
                         modifier = Modifier
@@ -267,7 +392,7 @@ fun AiScanTimetableDialog(
                                     OutlinedButton(
                                         onClick = { imagePickerLauncher.launch("image/*") },
                                         shape = RoundedCornerShape(10.dp),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                         modifier = Modifier.height(34.dp)
                                     ) {
                                         Text("Change Photo", fontSize = 12.sp)
@@ -278,7 +403,7 @@ fun AiScanTimetableDialog(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 32.dp, horizontal = 20.dp),
+                                    .padding(vertical = 30.dp, horizontal = 20.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Box(
@@ -308,7 +433,7 @@ fun AiScanTimetableDialog(
                                 Spacer(modifier = Modifier.height(4.dp))
 
                                 Text(
-                                    text = "Supports JPEG, PNG photos of hostel notice boards, mess timetables & weekly charts",
+                                    text = "Take a photo of your hostel notice board or upload timetable schedule",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = SleekTextSecondary,
                                     textAlign = TextAlign.Center
@@ -320,7 +445,7 @@ fun AiScanTimetableDialog(
                     // Sample Presets for quick testing
                     Column {
                         Text(
-                            text = "💡 Or Try with Sample Timetable Templates",
+                            text = "💡 Or Try Sample Timetable Schedules",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = SleekTextPrimary
@@ -384,7 +509,7 @@ fun AiScanTimetableDialog(
                     errorMessage?.let { error ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                         ) {
                             Row(
@@ -394,17 +519,25 @@ fun AiScanTimetableDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Outlined.Info,
+                                    Icons.Default.Info,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Scanning Alert",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Text(
+                                        text = error,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
                             }
                         }
                     }
@@ -426,10 +559,11 @@ fun AiScanTimetableDialog(
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = statusText.ifBlank { "Analyzing timetable image with AI..." },
+                                text = statusText.ifBlank { "Analyzing timetable image with Gemini Vision AI..." },
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SleekTerracottaPrimary
+                                color = SleekTerracottaPrimary,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -437,6 +571,9 @@ fun AiScanTimetableDialog(
                     // Scan Action Button
                     Button(
                         onClick = {
+                            if (!isKeyConfigured && tempApiKeyInput.isNotBlank()) {
+                                onUpdateApiKey(tempApiKeyInput.trim())
+                            }
                             onStartScan(selectedImageUri, customNote)
                         },
                         modifier = Modifier
@@ -456,11 +593,11 @@ fun AiScanTimetableDialog(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Scanning Timetable...", fontWeight = FontWeight.Bold)
+                            Text("Extracting with Gemini AI...", fontWeight = FontWeight.Bold)
                         } else {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Scan & Extract with AI", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Scan & Extract with Gemini AI", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
 

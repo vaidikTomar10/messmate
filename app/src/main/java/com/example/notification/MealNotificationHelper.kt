@@ -24,6 +24,7 @@ object MealNotificationHelper {
     const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
     const val KEY_REMINDER_MINUTES = "reminder_minutes"
     const val KEY_MESS_NAME = "mess_name"
+    const val KEY_GEMINI_API_KEY = "gemini_api_key"
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -74,6 +75,22 @@ object MealNotificationHelper {
     fun setMessName(context: Context, name: String) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_MESS_NAME, name.ifBlank { "Hostel Mess" }).apply()
+    }
+
+    fun getGeminiApiKey(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val customKey = prefs.getString(KEY_GEMINI_API_KEY, "") ?: ""
+        if (customKey.isNotBlank()) return customKey.trim()
+        val buildKey = com.example.BuildConfig.GEMINI_API_KEY
+        if (buildKey.isNotBlank() && buildKey != "MY_GEMINI_API_KEY") {
+            return buildKey.trim()
+        }
+        return ""
+    }
+
+    fun setGeminiApiKey(context: Context, apiKey: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_GEMINI_API_KEY, apiKey.trim()).apply()
     }
 
     fun showMealNotification(

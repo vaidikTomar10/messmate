@@ -6,9 +6,6 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
-import com.example.BuildConfig
-import com.example.data.local.FoodItemEntity
-import com.example.data.local.MealEntity
 import com.example.data.model.MealType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,7 +16,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 data class AiScannedDish(
@@ -49,7 +45,13 @@ data class AiTimetableResult(
 object TimetableAiService {
 
     private const val TAG = "TimetableAiService"
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+
+    // Supported multimodal models in priority order
+    private val GEMINI_MODELS = listOf(
+        "gemini-2.5-flash",
+        "gemini-3.5-flash",
+        "gemini-flash-latest"
+    )
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -58,7 +60,7 @@ object TimetableAiService {
         .build()
 
     /**
-     * Loads a Uri into a scaled Bitmap to prevent OutOfMemory and keep request payload efficient.
+     * Loads a Uri into a scaled Bitmap to prevent OutOfMemory and keep request payload fast.
      */
     fun loadScaledBitmap(context: Context, uri: Uri, maxDimension: Int = 1200): Bitmap? {
         return try {
@@ -97,202 +99,239 @@ object TimetableAiService {
     }
 
     /**
-     * Analyzes timetable image using Gemini 3.5 Flash Multimodal API
+     * Analyzes timetable image using Gemini Vision Multimodal API
      */
     suspend fun analyzeTimetableImage(
         bitmap: Bitmap,
+        apiKey: String,
         customPromptContext: String? = null
     ): Result<AiTimetableResult> = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val cleanedKey = apiKey.trim()
+        if (cleanedKey.isBlank() || cleanedKey == "MY_GEMINI_API_KEY") {
+            Log.w(TAG, "Gemini API key is missing or placeholder.")
+            return@withContext Result.failure(
+                IllegalArgumentException("Gemini API key is not configured. Please enter your Gemini API Key in the scanner or Settings.")
+            )
+        }
 
         val base64Image = bitmapToBase64(bitmap)
 
-        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
-            Log.w(TAG, "Gemini API key is not configured. Utilizing intelligent fallback parser.")
-            // Return intelligent demo parsed result so users can explore the feature seamlessly
-            return@withContext Result.success(getSmartDemoResult("Detected Hostel Mess Timetable"))
+        val systemPrompt = """
+            You are an expert AI food timetable scanner specialized in extracting college, university, hostel, and mess weekly food menus from photos, schedules, and tables.
+
+            Analyze the uploaded timetable image with extreme precision:
+            1. Identify all 7 days of the week:
+               - Day 1: Monday
+               - Day 2: Tuesday
+               - Day 3: Wednesday
+               - Day 4: Thursday
+               - Day 5: Friday
+               - Day 6: Saturday
+               - Day 7: Sunday
+
+            2. For each day, accurately extract all 4 meal slots:
+               - BREAKFAST (default timing: 07:30 to 09:30 if timing not found in image)
+               - LUNCH (default timing: 12:30 to 14:30 if timing not found in image)
+               - SNACKS (default timing: 17:00 to 18:30 if timing not found in image, or High Tea / Evening Snacks)
+               - DINNER (default timing: 20:00 to 22:00 if timing not found in image)
+
+            3. If the image specifies timings for the meals (e.g., "7:30 - 9:00 AM" or "12:30 PM - 2:30 PM"), parse them in 24-hour "HH:mm" format (e.g., startTime "07:30", endTime "09:30").
+
+            4. Format the dishes for each meal cleanly, separating distinct items with " • " (bullet symbol). Example: "Aloo Paratha • Curd • Mango Pickle • Masala Chai". If a meal slot has nothing listed or is unclear, provide appropriate dishes for that slot.
+
+            5. Extract all individual food dishes into "extractedDishes" with a category (e.g. "Breakfast", "Breads & Roti", "Dal & Curries", "Rice & Biryani", "Snacks & Drinks", "Desserts & Sweets", "Sides & Salads") and a matching emoji icon.
+
+            6. Extract the Mess or Hostel name if visible in headers or titles.
+
+            Return strictly valid JSON matching this schema:
+            {
+              "messName": "Hostel / Mess Name if found, or null",
+              "meals": [
+                {
+                  "dayOfWeek": 1,
+                  "mealType": "BREAKFAST",
+                  "items": "Poha • Mint Chutney • Tea",
+                  "startTime": "07:30",
+                  "endTime": "09:30",
+                  "specialNote": ""
+                }
+              ],
+              "extractedDishes": [
+                {
+                  "name": "Poha",
+                  "category": "Breakfast",
+                  "iconEmoji": "🥞"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val requestJson = JSONObject().apply {
+            val contentsArray = JSONArray().apply {
+                val contentObj = JSONObject().apply {
+                    val partsArray = JSONArray().apply {
+                        put(JSONObject().apply {
+                            val userNoteText = if (!customPromptContext.isNullOrBlank()) "\nAdditional context from user: $customPromptContext" else ""
+                            put("text", systemPrompt + userNoteText)
+                        })
+                        put(JSONObject().apply {
+                            put("inlineData", JSONObject().apply {
+                                put("mimeType", "image/jpeg")
+                                put("data", base64Image)
+                            })
+                        })
+                    }
+                    put("parts", partsArray)
+                }
+                put(contentObj)
+            }
+            put("contents", contentsArray)
+
+            val generationConfig = JSONObject().apply {
+                put("temperature", 0.1)
+                put("topP", 0.95)
+                put("responseMimeType", "application/json")
+            }
+            put("generationConfig", generationConfig)
         }
 
-        try {
-            val systemPrompt = """
-                You are an expert AI food timetable scanner specialized in extracting college, hostel, and mess food menus from images, schedules, and photos.
-                Analyze the provided timetable image thoroughly.
-                
-                Identify the meals for all 7 days of the week:
-                - Day 1: Monday
-                - Day 2: Tuesday
-                - Day 3: Wednesday
-                - Day 4: Thursday
-                - Day 5: Friday
-                - Day 6: Saturday
-                - Day 7: Sunday
+        val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
 
-                For each day, extract the 4 meal slots:
-                1. BREAKFAST (default time: 07:30 to 09:30 if not specified in image)
-                2. LUNCH (default time: 12:30 to 14:30 if not specified in image)
-                3. SNACKS (default time: 17:00 to 18:30 if not specified in image)
-                4. DINNER (default time: 20:00 to 22:00 if not specified in image)
+        var lastError: Exception? = null
 
-                Format the dishes for each meal cleanly, separated by " • " (bullet symbol).
-                Also extract individual dishes with their category (e.g., Breakfast, Breads & Roti, Dal & Curries, Rice & Biryani, Snacks & Drinks, Desserts & Sweets, Sides & Salads) and a matching food emoji.
+        // Try supported Gemini models in sequence
+        for (modelName in GEMINI_MODELS) {
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$cleanedKey"
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .build()
 
-                Return strictly valid JSON with this exact schema:
-                {
-                  "messName": "Hostel / Mess Name if written in image header, or null",
-                  "meals": [
-                    {
-                      "dayOfWeek": 1,
-                      "mealType": "BREAKFAST",
-                      "items": "Poha • Mint Chutney • Tea",
-                      "startTime": "07:30",
-                      "endTime": "09:30",
-                      "specialNote": "Special note if any, or empty"
+                val response = okHttpClient.newCall(request).execute()
+                val responseBodyString = response.body?.string() ?: ""
+
+                if (response.isSuccessful) {
+                    val parsed = parseGeminiResponse(responseBodyString)
+                    return@withContext Result.success(parsed)
+                } else {
+                    Log.w(TAG, "Model $modelName responded with code ${response.code}: $responseBodyString")
+                    val errorMsg = parseErrorMessage(responseBodyString, response.code)
+                    lastError = Exception("Gemini API error ($modelName): $errorMsg")
+                    // If error is invalid API key or permission denied, no need to retry other models
+                    if (response.code == 400 && responseBodyString.contains("API_KEY_INVALID", ignoreCase = true) ||
+                        response.code == 403
+                    ) {
+                        return@withContext Result.failure(lastError)
                     }
-                  ],
-                  "extractedDishes": [
-                    {
-                      "name": "Poha",
-                      "category": "Breakfast",
-                      "iconEmoji": "🥞"
-                    }
-                  ]
                 }
-            """.trimIndent()
-
-            val requestJson = JSONObject().apply {
-                val contentsArray = JSONArray().apply {
-                    val contentObj = JSONObject().apply {
-                        val partsArray = JSONArray().apply {
-                            put(JSONObject().apply {
-                                put("text", systemPrompt + (customPromptContext?.let { "\nAdditional User Note: $it" } ?: ""))
-                            })
-                            put(JSONObject().apply {
-                                put("inlineData", JSONObject().apply {
-                                    put("mimeType", "image/jpeg")
-                                    put("data", base64Image)
-                                })
-                            })
-                        }
-                        put("parts", partsArray)
-                    }
-                    put(contentObj)
-                }
-                put("contents", contentsArray)
-
-                val generationConfig = JSONObject().apply {
-                    put("temperature", 0.2)
-                    put("topP", 0.95)
-                    val responseFormat = JSONObject().apply {
-                        val textFormat = JSONObject().apply {
-                            put("mimeType", "application/json")
-                        }
-                        put("text", textFormat)
-                    }
-                    put("responseFormat", responseFormat)
-                }
-                put("generationConfig", generationConfig)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed calling $modelName: ${e.message}")
+                lastError = e
             }
+        }
 
-            val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url("$BASE_URL?key=$apiKey")
-                .post(requestBody)
-                .build()
+        Result.failure(lastError ?: Exception("Unable to extract timetable from image. Please verify your connection and API key."))
+    }
 
-            val response = okHttpClient.newCall(request).execute()
-            val responseBodyString = response.body?.string() ?: ""
-
-            if (!response.isSuccessful) {
-                Log.e(TAG, "Gemini API error code ${response.code}: $responseBodyString")
-                // If API fails due to quota or invalid key, return smart sample so user isn't stuck
-                return@withContext Result.success(
-                    getSmartDemoResult("Scanned Hostel Timetable (AI Verified)").copy(
-                        message = "Note: Analyzed using built-in optical model. Result ready for confirmation."
-                    )
-                )
+    private fun parseErrorMessage(errorBody: String, httpCode: Int): String {
+        return try {
+            val json = JSONObject(errorBody)
+            val errorObj = json.optJSONObject("error")
+            val message = errorObj?.optString("message")
+            if (!message.isNullOrBlank()) {
+                message
+            } else {
+                "HTTP $httpCode error"
             }
-
-            val parsedResult = parseGeminiResponse(responseBodyString)
-            Result.success(parsedResult)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error analyzing timetable image with Gemini: ${e.message}", e)
-            // Fallback to demo result with friendly note
-            Result.success(
-                getSmartDemoResult("Extracted Hostel Timetable").copy(
-                    message = "Image processed with smart layout detection."
-                )
-            )
+        } catch (_: Exception) {
+            "HTTP $httpCode error: $errorBody"
         }
     }
 
-    private fun parseGeminiResponse(jsonString: String): AiTimetableResult {
-        return try {
-            val root = JSONObject(jsonString)
-            val candidates = root.optJSONArray("candidates")
-            val candidate = candidates?.optJSONObject(0)
-            val content = candidate?.optJSONObject("content")
-            val parts = content?.optJSONArray("parts")
-            val rawText = parts?.optJSONObject(0)?.optString("text") ?: "{}"
-
-            // Clean markdown blocks if any
-            val cleanJson = rawText.replace("```json", "").replace("```", "").trim()
-            val parsedObj = JSONObject(cleanJson)
-
-            val messName = parsedObj.optString("messName", "").ifBlank { null }
-            val mealsArray = parsedObj.optJSONArray("meals") ?: JSONArray()
-            val dishesArray = parsedObj.optJSONArray("extractedDishes") ?: JSONArray()
-
-            val mealsList = mutableListOf<AiScannedMealItem>()
-            for (i in 0 until mealsArray.length()) {
-                val item = mealsArray.getJSONObject(i)
-                val dayOfWeek = item.optInt("dayOfWeek", 1).coerceIn(1, 7)
-                val mealType = item.optString("mealType", "BREAKFAST").uppercase()
-                val items = item.optString("items", "")
-                val startTime = item.optString("startTime", "07:30")
-                val endTime = item.optString("endTime", "09:30")
-                val specialNote = item.optString("specialNote", "")
-
-                if (items.isNotBlank()) {
-                    mealsList.add(
-                        AiScannedMealItem(
-                            dayOfWeek = dayOfWeek,
-                            mealType = mealType,
-                            items = items,
-                            startTime = startTime,
-                            endTime = endTime,
-                            specialNote = specialNote
-                        )
-                    )
-                }
-            }
-
-            val dishesList = mutableListOf<AiScannedDish>()
-            for (i in 0 until dishesArray.length()) {
-                val dish = dishesArray.getJSONObject(i)
-                val name = dish.optString("name", "")
-                val category = dish.optString("category", "Dal & Curries")
-                val emoji = dish.optString("iconEmoji", "🍽️")
-                if (name.isNotBlank()) {
-                    dishesList.add(AiScannedDish(name, category, emoji))
-                }
-            }
-
-            // If parsed meals count is very low, fill remaining with defaults
-            val completeMeals = ensureAll28Slots(mealsList)
-
-            AiTimetableResult(
-                messName = messName,
-                meals = completeMeals,
-                extractedDishes = dishesList,
-                rawJson = cleanJson,
-                isDemoOrFallback = false,
-                message = "Successfully extracted ${completeMeals.size} meal slots from image."
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "JSON parsing error: ${e.message}", e)
-            getSmartDemoResult("Scanned Hostel Timetable")
+    private fun extractJsonBlock(rawText: String): String {
+        val trimmed = rawText.trim()
+        val startIndex = trimmed.indexOf('{')
+        val endIndex = trimmed.lastIndexOf('}')
+        if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+            return trimmed.substring(startIndex, endIndex + 1)
         }
+        return trimmed
+    }
+
+    fun parseGeminiResponse(jsonString: String): AiTimetableResult {
+        val root = JSONObject(jsonString)
+        val candidates = root.optJSONArray("candidates")
+        val candidate = candidates?.optJSONObject(0)
+        val content = candidate?.optJSONObject("content")
+        val parts = content?.optJSONArray("parts")
+
+        val sb = java.lang.StringBuilder()
+        if (parts != null) {
+            for (i in 0 until parts.length()) {
+                val part = parts.optJSONObject(i)
+                val text = part?.optString("text", "") ?: ""
+                sb.append(text)
+            }
+        }
+
+        val rawText = sb.toString().ifBlank { "{}" }
+        val cleanJson = extractJsonBlock(rawText)
+        val parsedObj = JSONObject(cleanJson)
+
+        val messName = parsedObj.optString("messName", "").ifBlank { null }
+        val mealsArray = parsedObj.optJSONArray("meals") ?: JSONArray()
+        val dishesArray = parsedObj.optJSONArray("extractedDishes") ?: JSONArray()
+
+        val mealsList = mutableListOf<AiScannedMealItem>()
+        for (i in 0 until mealsArray.length()) {
+            val item = mealsArray.getJSONObject(i)
+            val dayOfWeek = item.optInt("dayOfWeek", 1).coerceIn(1, 7)
+            val mealType = item.optString("mealType", "BREAKFAST").uppercase()
+            val items = item.optString("items", "").trim()
+            val startTime = item.optString("startTime", "").ifBlank {
+                MealType.entries.find { it.name.equals(mealType, ignoreCase = true) }?.defaultStart ?: "07:30"
+            }
+            val endTime = item.optString("endTime", "").ifBlank {
+                MealType.entries.find { it.name.equals(mealType, ignoreCase = true) }?.defaultEnd ?: "09:30"
+            }
+            val specialNote = item.optString("specialNote", "").trim()
+
+            if (items.isNotBlank()) {
+                mealsList.add(
+                    AiScannedMealItem(
+                        dayOfWeek = dayOfWeek,
+                        mealType = mealType,
+                        items = items,
+                        startTime = startTime,
+                        endTime = endTime,
+                        specialNote = specialNote
+                    )
+                )
+            }
+        }
+
+        val dishesList = mutableListOf<AiScannedDish>()
+        for (i in 0 until dishesArray.length()) {
+            val dish = dishesArray.getJSONObject(i)
+            val name = dish.optString("name", "").trim()
+            val category = dish.optString("category", "Dal & Curries").trim()
+            val emoji = dish.optString("iconEmoji", "🍽️").trim()
+            if (name.isNotBlank()) {
+                dishesList.add(AiScannedDish(name, category, emoji.ifBlank { "🍽️" }))
+            }
+        }
+
+        val completeMeals = ensureAll28Slots(mealsList)
+
+        return AiTimetableResult(
+            messName = messName,
+            meals = completeMeals,
+            extractedDishes = dishesList,
+            rawJson = cleanJson,
+            isDemoOrFallback = false,
+            message = "Successfully extracted ${completeMeals.size} meal slots with Gemini Vision AI."
+        )
     }
 
     private fun ensureAll28Slots(scanned: List<AiScannedMealItem>): List<AiScannedMealItem> {
@@ -320,7 +359,7 @@ object TimetableAiService {
     }
 
     /**
-     * Smart preset templates for testing & fallback
+     * Smart preset templates for testing & instant demos
      */
     fun getSmartDemoResult(title: String = "Grand Hostel Mess"): AiTimetableResult {
         val meals = listOf(
@@ -389,7 +428,7 @@ object TimetableAiService {
             meals = meals,
             extractedDishes = dishes,
             isDemoOrFallback = true,
-            message = "Extracted 28 meal slots across all 7 days with AI timetable parser."
+            message = "Loaded timetable template for $title."
         )
     }
 }

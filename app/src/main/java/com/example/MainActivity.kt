@@ -116,6 +116,7 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val reminderMinutes by viewModel.reminderMinutes.collectAsStateWithLifecycle()
     val messName by viewModel.messName.collectAsStateWithLifecycle()
+    val geminiApiKey by viewModel.geminiApiKey.collectAsStateWithLifecycle()
 
     // AI Timetable Scanner State
     val showAiScanDialog by viewModel.showAiScanDialog.collectAsStateWithLifecycle()
@@ -303,9 +304,11 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                             messName = messName,
                             notificationsEnabled = notificationsEnabled,
                             reminderMinutes = reminderMinutes,
+                            geminiApiKey = geminiApiKey,
                             onMessNameChange = { viewModel.updateMessName(it) },
                             onNotificationsToggle = { viewModel.setNotificationsToggle(it) },
                             onReminderMinutesChange = { viewModel.updateReminderMinutes(it) },
+                            onUpdateGeminiApiKey = { viewModel.updateGeminiApiKey(it) },
                             onResetMenu = { viewModel.resetMenuToDefaults() },
                             onResetFoodLibrary = { viewModel.resetFoodLibrary() },
                             onOpenAiScan = { viewModel.openAiScanDialog() }
@@ -333,6 +336,8 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                     statusText = aiScanStatusText,
                     scanResult = aiScanResult,
                     errorMessage = aiScanError,
+                    geminiApiKey = geminiApiKey,
+                    onUpdateApiKey = { viewModel.updateGeminiApiKey(it) },
                     onSelectImageUri = { viewModel.setSelectedImageUri(it) },
                     onStartScan = { uri, note ->
                         viewModel.scanTimetableImage(context, uri, note)
