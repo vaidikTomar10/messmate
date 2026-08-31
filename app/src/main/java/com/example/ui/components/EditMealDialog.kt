@@ -15,11 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -275,7 +275,7 @@ fun EditMealDialog(
                     label = { Text("Special Note (Optional)") },
                     placeholder = { Text("e.g. Special Feast, Sweet Included") },
                     leadingIcon = {
-                        Icon(Icons.Default.Notes, contentDescription = "Special note", tint = SleekTerracottaPrimary)
+                        Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Special note", tint = SleekTerracottaPrimary)
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),

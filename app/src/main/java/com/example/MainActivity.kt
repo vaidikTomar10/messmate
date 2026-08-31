@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Restaurant
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -48,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.DayEnum
 import com.example.ui.MessViewModel
+import com.example.ui.components.AiScanTimetableDialog
 import com.example.ui.components.EditMealDialog
 import com.example.ui.screens.FoodCategoriesScreen
 import com.example.ui.screens.SettingsScreen
@@ -113,8 +117,17 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
     val reminderMinutes by viewModel.reminderMinutes.collectAsStateWithLifecycle()
     val messName by viewModel.messName.collectAsStateWithLifecycle()
 
+    // AI Timetable Scanner State
+    val showAiScanDialog by viewModel.showAiScanDialog.collectAsStateWithLifecycle()
+    val isAiScanning by viewModel.isAiScanning.collectAsStateWithLifecycle()
+    val aiScanStatusText by viewModel.aiScanStatusText.collectAsStateWithLifecycle()
+    val aiScanResult by viewModel.aiScanResult.collectAsStateWithLifecycle()
+    val selectedImageUri by viewModel.selectedImageUri.collectAsStateWithLifecycle()
+    val aiScanError by viewModel.aiScanError.collectAsStateWithLifecycle()
+
     var currentTab by remember { mutableStateOf(NavigationTab.TODAY) }
     val realCurrentDay = remember { MealTimeUtils.getCurrentDayNumber() }
+    val context = LocalContext.current
 
     Scaffold(
         modifier = Modifier
@@ -151,6 +164,17 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 actions = {
+                    IconButton(
+                        onClick = { viewModel.openAiScanDialog() },
+                        modifier = Modifier.testTag("topbar_ai_scan_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Scan Timetable with AI",
+                            tint = SleekTerracottaPrimary
+                        )
+                    }
+
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = SleekSecondaryContainer,
@@ -253,7 +277,8 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                             onSearchChange = { viewModel.setSearchQuery(it) },
                             onMealFilterChange = { viewModel.setMealFilter(it) },
                             onEditMeal = { viewModel.openEditMeal(it) },
-                            onToggleFavorite = { id, current -> viewModel.toggleFavorite(id, current) }
+                            onToggleFavorite = { id, current -> viewModel.toggleFavorite(id, current) },
+                            onOpenAiScan = { viewModel.openAiScanDialog() }
                         )
                     }
                     NavigationTab.FOOD_LIBRARY -> {
@@ -282,7 +307,8 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                             onNotificationsToggle = { viewModel.setNotificationsToggle(it) },
                             onReminderMinutesChange = { viewModel.updateReminderMinutes(it) },
                             onResetMenu = { viewModel.resetMenuToDefaults() },
-                            onResetFoodLibrary = { viewModel.resetFoodLibrary() }
+                            onResetFoodLibrary = { viewModel.resetFoodLibrary() },
+                            onOpenAiScan = { viewModel.openAiScanDialog() }
                         )
                     }
                 }
@@ -296,6 +322,29 @@ fun MessMateApp(viewModel: MessViewModel = viewModel()) {
                     onSave = { mealId, items, start, end, note ->
                         viewModel.saveMealEdit(mealId, items, start, end, note)
                     }
+                )
+            }
+
+            // AI Timetable Scanner Modal Sheet
+            if (showAiScanDialog) {
+                AiScanTimetableDialog(
+                    selectedImageUri = selectedImageUri,
+                    isScanning = isAiScanning,
+                    statusText = aiScanStatusText,
+                    scanResult = aiScanResult,
+                    errorMessage = aiScanError,
+                    onSelectImageUri = { viewModel.setSelectedImageUri(it) },
+                    onStartScan = { uri, note ->
+                        viewModel.scanTimetableImage(context, uri, note)
+                    },
+                    onLoadSampleTemplate = { template ->
+                        viewModel.loadSampleTimetableTemplate(template)
+                    },
+                    onApplyResult = { result, customMessName, importDishes ->
+                        viewModel.applyScannedTimetable(result, customMessName, importDishes)
+                        currentTab = NavigationTab.WEEKLY
+                    },
+                    onDismiss = { viewModel.closeAiScanDialog() }
                 )
             }
         }

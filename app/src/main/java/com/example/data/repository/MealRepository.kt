@@ -84,6 +84,45 @@ class MealRepository(
         }
     }
 
+    suspend fun applyScannedTimetable(
+        scannedMeals: List<com.example.data.ai.AiScannedMealItem>,
+        extractedDishes: List<com.example.data.ai.AiScannedDish>,
+        importDishesToLibrary: Boolean
+    ) {
+        // Prepare meal entities
+        val entities = scannedMeals.map { item ->
+            MealEntity(
+                dayOfWeek = item.dayOfWeek,
+                mealType = item.mealType,
+                items = item.items.trim(),
+                startTime = item.startTime.trim(),
+                endTime = item.endTime.trim(),
+                specialNote = item.specialNote.trim(),
+                isFavorite = false
+            )
+        }
+
+        // Delete old meals and insert new ones
+        mealDao.deleteAllMeals()
+        mealDao.insertAll(entities)
+
+        // Optionally import dishes into food library
+        if (importDishesToLibrary && extractedDishes.isNotEmpty()) {
+            for (dish in extractedDishes) {
+                if (dish.name.isNotBlank()) {
+                    foodDao.insertFoodItem(
+                        FoodItemEntity(
+                            name = dish.name.trim(),
+                            category = dish.category.trim().ifBlank { "Dal & Curries" },
+                            iconEmoji = dish.iconEmoji.ifBlank { "🍽️" },
+                            isCustom = true
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     suspend fun resetToDefaultMenu() {
         mealDao.deleteAllMeals()
         populateDefaultMenu()

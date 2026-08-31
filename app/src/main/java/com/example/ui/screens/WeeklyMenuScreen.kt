@@ -22,9 +22,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -32,6 +36,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
@@ -45,6 +50,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,6 +60,12 @@ import com.example.data.model.DayEnum
 import com.example.data.model.MealType
 import com.example.ui.components.AppFooter
 import com.example.ui.components.MealCard
+import com.example.ui.theme.SleekBorder
+import com.example.ui.theme.SleekPrimaryContainer
+import com.example.ui.theme.SleekSecondaryContainer
+import com.example.ui.theme.SleekTerracottaPrimary
+import com.example.ui.theme.SleekTextPrimary
+import com.example.ui.theme.SleekTextSecondary
 import com.example.util.MealTimeUtils
 
 import androidx.compose.ui.unit.sp
@@ -68,6 +81,7 @@ fun WeeklyMenuScreen(
     onMealFilterChange: (MealType?) -> Unit,
     onEditMeal: (MealEntity) -> Unit,
     onToggleFavorite: (Long, Boolean) -> Unit,
+    onOpenAiScan: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val realCurrentDay = remember { MealTimeUtils.getCurrentDayNumber() }
@@ -97,13 +111,79 @@ fun WeeklyMenuScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
+        // AI Timetable Scanner Action Banner
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .clickable { onOpenAiScan() }
+                .testTag("ai_scan_banner_button"),
+            shape = RoundedCornerShape(16.dp),
+            color = SleekSecondaryContainer,
+            border = BorderStroke(1.dp, SleekBorder)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SleekPrimaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = SleekTerracottaPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "AI Timetable Scanner",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = SleekTextPrimary
+                        )
+                        Text(
+                            text = "Upload menu photo to auto-set 7-day schedule",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SleekTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SleekTerracottaPrimary
+                ) {
+                    Text(
+                        text = "Scan Image",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
         // Search Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
                 .testTag("menu_search_input"),
             placeholder = { Text("Search dishes: Paneer, Biryani, Dosa...") },
             leadingIcon = {

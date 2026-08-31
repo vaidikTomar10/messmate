@@ -57,6 +57,25 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
     private val _messName = MutableStateFlow("Hostel Mess")
     val messName: StateFlow<String> = _messName.asStateFlow()
 
+    // AI Timetable Scanner State
+    private val _showAiScanDialog = MutableStateFlow(false)
+    val showAiScanDialog: StateFlow<Boolean> = _showAiScanDialog.asStateFlow()
+
+    private val _isAiScanning = MutableStateFlow(false)
+    val isAiScanning: StateFlow<Boolean> = _isAiScanning.asStateFlow()
+
+    private val _aiScanStatusText = MutableStateFlow("")
+    val aiScanStatusText: StateFlow<String> = _aiScanStatusText.asStateFlow()
+
+    private val _aiScanResult = MutableStateFlow<com.example.data.ai.AiTimetableResult?>(null)
+    val aiScanResult: StateFlow<com.example.data.ai.AiTimetableResult?> = _aiScanResult.asStateFlow()
+
+    private val _selectedImageUri = MutableStateFlow<android.net.Uri?>(null)
+    val selectedImageUri: StateFlow<android.net.Uri?> = _selectedImageUri.asStateFlow()
+
+    private val _aiScanError = MutableStateFlow<String?>(null)
+    val aiScanError: StateFlow<String?> = _aiScanError.asStateFlow()
+
     // Clock ticker flow to refresh active meal detection every 30 seconds
     private val tickerFlow = MutableStateFlow(System.currentTimeMillis())
 
@@ -252,6 +271,102 @@ class MessViewModel(application: Application) : AndroidViewModel(application) {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(shareIntent)
+        }
+    }
+
+    // AI Timetable Scanner Actions
+    fun openAiScanDialog() {
+        _showAiScanDialog.value = true
+        _aiScanError.value = null
+    }
+
+    fun closeAiScanDialog() {
+        _showAiScanDialog.value = false
+        _isAiScanning.value = false
+        _aiScanError.value = null
+    }
+
+    fun setSelectedImageUri(uri: android.net.Uri?) {
+        _selectedImageUri.value = uri
+        _aiScanError.value = null
+    }
+
+    fun clearAiScan() {
+        _selectedImageUri.value = null
+        _aiScanResult.value = null
+        _aiScanError.value = null
+        _isAiScanning.value = false
+    }
+
+    fun scanTimetableImage(context: Context, uri: android.net.Uri?, customNote: String? = null) {
+        if (uri == null) {
+            _aiScanError.value = "Please select or upload a timetable image first."
+            return
+        }
+
+        viewModelScope.launch {
+            _isAiScanning.value = true
+            _aiScanError.value = null
+            _aiScanStatusText.value = "Loading timetable image..."
+
+            val bitmap = com.example.data.ai.TimetableAiService.loadScaledBitmap(context, uri)
+            if (bitmap == null) {
+                _isAiScanning.value = false
+                _aiScanError.value = "Failed to load image. Please select a valid photo."
+                return@launch
+            }
+
+            _aiScanStatusText.value = "AI is analyzing timetable columns, days & meal slots..."
+            val result = com.example.data.ai.TimetableAiService.analyzeTimetableImage(bitmap, customNote)
+
+            result.onSuccess { scanResult ->
+                _aiScanResult.value = scanResult
+                _isAiScanning.value = false
+                _aiScanStatusText.value = "Extraction complete!"
+            }.onFailure { error ->
+                _isAiScanning.value = false
+                _aiScanError.value = "AI Scanning encountered an issue: ${error.message}"
+            }
+        }
+    }
+
+    fun loadSampleTimetableTemplate(templateTitle: String) {
+        viewModelScope.launch {
+            _isAiScanning.value = true
+            _aiScanStatusText.value = "Generating timetable schedule with AI..."
+            delay(800)
+            val demoResult = com.example.data.ai.TimetableAiService.getSmartDemoResult(templateTitle)
+            _aiScanResult.value = demoResult
+            _isAiScanning.value = false
+            _aiScanStatusText.value = "Sample timetable loaded and ready for review!"
+        }
+    }
+
+    fun applyScannedTimetable(
+        result: com.example.data.ai.AiTimetableResult,
+        customMessName: String?,
+        importDishesToLibrary: Boolean
+    ) {
+        viewModelScope.launch {
+            repository.applyScannedTimetable(
+                scannedMeals = result.meals,
+                extractedDishes = result.extractedDishes,
+                importDishesToLibrary = importDishesToLibrary
+            )
+
+            // Update mess name if provided or extracted
+            val newName = customMessName?.takeIf { it.isNotBlank() } ?: result.messName
+            if (!newName.isNullOrBlank()) {
+                updateMessName(newName.trim())
+            }
+
+            MessWidgetProvider.updateAllWidgets(context)
+            if (_notificationsEnabled.value) {
+                MealNotificationHelper.scheduleNextMealReminder(context)
+            }
+
+            closeAiScanDialog()
+            clearAiScan()
         }
     }
 }
